@@ -16,11 +16,8 @@ const client = new Client({
   ]
 });
 
-// ─── Config ───────────────────────────────────────────────────────
-const CHANNEL_ID = process.env.CHANNEL_ID;
 const STOCK_FILE = 'stock.json';
 
-// ─── Listes ───────────────────────────────────────────────────────
 const DRAGODINDES = [
   'Amande', 'Rousse', 'Dorée',
   'Amande/Rousse', 'Amande/Dorée', 'Dorée/Rousse',
@@ -56,45 +53,43 @@ const PARCHOS = [
   'Parchemin Doré',
 ];
 
-// ─── Stock ────────────────────────────────────────────────────────
 function loadStock() {
-  if (!fs.existsSync(STOCK_FILE)) return { dd: [], parchos: {} };
-  return JSON.parse(fs.readFileSync(STOCK_FILE));
+  if (!fs.existsSync(STOCK_FILE)) return { dd: [], dd_vente: [], parchos: {} };
+  const s = JSON.parse(fs.readFileSync(STOCK_FILE));
+  if (!s.dd_vente) s.dd_vente = [];
+  return s;
 }
 
 function saveStock(stock) {
   fs.writeFileSync(STOCK_FILE, JSON.stringify(stock, null, 2));
 }
 
-// ─── Trouver le meilleur match dans une liste ─────────────────────
 function findMatch(input, list) {
   const q = input.toLowerCase().trim();
-  // exact
   const exact = list.find(i => i.toLowerCase() === q);
   if (exact) return exact;
-  // commence par
   const starts = list.find(i => i.toLowerCase().startsWith(q));
   if (starts) return starts;
-  // contient
   const contains = list.find(i => i.toLowerCase().includes(q));
   if (contains) return contains;
   return null;
 }
 
-// ─── Générer Excel ────────────────────────────────────────────────
 function generateExcel(stock) {
   const wb = XLSX.utils.book_new();
 
-  // Feuille DD
   const ddRows = [['Type', 'Sexe', 'Quantité']];
-  for (const entry of stock.dd) {
-    ddRows.push([entry.type, entry.sexe, entry.quantite]);
-  }
+  for (const e of stock.dd) ddRows.push([e.type, e.sexe, e.quantite]);
   const wsDd = XLSX.utils.aoa_to_sheet(ddRows);
   wsDd['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, wsDd, 'Dragodindes');
+  XLSX.utils.book_append_sheet(wb, wsDd, 'Stock DD');
 
-  // Feuille Parchos
+  const venteRows = [['Type', 'Sexe', 'Quantité']];
+  for (const e of stock.dd_vente) venteRows.push([e.type, e.sexe, e.quantite]);
+  const wsVente = XLSX.utils.aoa_to_sheet(venteRows);
+  wsVente['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsVente, 'DD à vendre');
+
   const parchoRows = [['Type', 'Quantité']];
   for (const [type, qty] of Object.entries(stock.parchos)) {
     if (qty > 0) parchoRows.push([type, qty]);
@@ -108,23 +103,24 @@ function generateExcel(stock) {
   return path;
 }
 
-// ─── Boutons principaux ───────────────────────────────────────────
 function getMainButtons() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('dd_naissance').setLabel('🥚 Naissance DD').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('dd_vente').setLabel('💀 Vente DD').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('dd_avendre').setLabel('🏷️ DD à vendre').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('dd_enlever').setLabel('❌ Enlever DD').setStyle(ButtonStyle.Danger),
+    ),
+    new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('parcho_gain').setLabel('📜 Gain Parcho').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('parcho_vente').setLabel('💰 Vente Parcho').setStyle(ButtonStyle.Secondary),
     )
   ];
 }
 
-// ─── Slash command /stock ─────────────────────────────────────────
 async function registerSlashCommand() {
   const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
   const commands = [
-    new SlashCommandBuilder().setName('stock').setDescription('Affiche et envoie le fichier Excel du stock'),
+    new SlashCommandBuilder().setName('stock').setDescription('Envoie le fichier Excel du stock'),
     new SlashCommandBuilder().setName('elevage').setDescription('Affiche le panneau de gestion élevage'),
   ].map(c => c.toJSON());
 
@@ -134,66 +130,51 @@ async function registerSlashCommand() {
   }
 }
 
-// ─── Ready ────────────────────────────────────────────────────────
 client.once(Events.ClientReady, async c => {
   console.log(`✅ Connecté en tant que ${c.user.tag}`);
   await registerSlashCommand();
 });
 
-// ─── Interactions ─────────────────────────────────────────────────
 client.on(Events.InteractionCreate, async interaction => {
 
-  // ── Slash /stock ──
   if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
     const stock = loadStock();
     const path = generateExcel(stock);
-
-    // Résumé texte
     const totalDD = stock.dd.reduce((s, e) => s + e.quantite, 0);
+    const totalVente = stock.dd_vente.reduce((s, e) => s + e.quantite, 0);
     const totalParchos = Object.values(stock.parchos).reduce((s, v) => s + v, 0);
-    let resume = `📊 **Stock actuel**\n🐔 **Dragodindes :** ${totalDD} au total\n`;
-    for (const entry of stock.dd) {
-      resume += `  • ${entry.type} (${entry.sexe}) : ${entry.quantite}\n`;
-    }
-    resume += `\n📜 **Parchos :** ${totalParchos} au total\n`;
-    for (const [type, qty] of Object.entries(stock.parchos)) {
-      if (qty > 0) resume += `  • ${type} : ${qty}\n`;
-    }
-
+    const resume = `📊 **Stock actuel**\n🐔 **DD en élevage :** ${totalDD}\n🏷️ **DD à vendre :** ${totalVente}\n📜 **Parchos :** ${totalParchos}`;
     await interaction.reply({
-      content: resume || 'Stock vide !',
+      content: resume,
       files: [{ attachment: path, name: 'stock_elevage.xlsx' }],
       ephemeral: true,
     });
     return;
   }
 
-  // ── Slash /elevage ──
   if (interaction.isChatInputCommand() && interaction.commandName === 'elevage') {
     await interaction.reply({
-      content: '🐔 **Gestion de l\'élevage**\nUtilise les boutons pour mettre à jour ton stock :',
+      content: '🐔 **Gestion de l\'élevage**',
       components: getMainButtons(),
     });
     return;
   }
 
-  // ── Boutons → Modals ──
   if (interaction.isButton()) {
-    const modals = {
-      dd_naissance: { title: '🥚 Naissance de Dragodindes', fields: ['type_dd', 'sexe_dd', 'quantite'] },
-      dd_vente:     { title: '💀 Vente de Dragodindes',     fields: ['type_dd', 'sexe_dd', 'quantite'] },
-      parcho_gain:  { title: '📜 Gain de Parchemins',       fields: ['type_parcho', 'quantite'] },
-      parcho_vente: { title: '💰 Vente de Parchemins',      fields: ['type_parcho', 'quantite'] },
+    const titles = {
+      dd_naissance: '🥚 Naissance de Dragodindes',
+      dd_avendre:   '🏷️ DD à mettre en vente',
+      dd_enlever:   '❌ Enlever des Dragodindes',
+      parcho_gain:  '📜 Gain de Parchemins',
+      parcho_vente: '💰 Vente de Parchemins',
     };
-
-    const config = modals[interaction.customId];
-    if (!config) return;
+    if (!titles[interaction.customId]) return;
 
     const modal = new ModalBuilder()
       .setCustomId(`modal_${interaction.customId}`)
-      .setTitle(config.title);
+      .setTitle(titles[interaction.customId]);
 
-    if (config.fields.includes('type_dd')) {
+    if (['dd_naissance', 'dd_avendre', 'dd_enlever'].includes(interaction.customId)) {
       modal.addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId('type_dd').setLabel('Type de DD (ex: Emeraude, Prune/Rousse...)').setStyle(TextInputStyle.Short).setRequired(true)
@@ -215,12 +196,10 @@ client.on(Events.InteractionCreate, async interaction => {
         )
       );
     }
-
     await interaction.showModal(modal);
     return;
   }
 
-  // ── Modal submit ──
   if (interaction.isModalSubmit()) {
     const stock = loadStock();
     const action = interaction.customId.replace('modal_', '');
@@ -230,59 +209,60 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.reply({ content: '❌ Quantité invalide !', ephemeral: true });
     }
 
-    // DD
-    if (action === 'dd_naissance' || action === 'dd_vente') {
+    if (['dd_naissance', 'dd_avendre', 'dd_enlever'].includes(action)) {
       const inputType = interaction.fields.getTextInputValue('type_dd');
       const inputSexe = interaction.fields.getTextInputValue('sexe_dd').toUpperCase();
-
       const matchedType = findMatch(inputType, DRAGODINDES);
-      if (!matchedType) {
-        return interaction.reply({ content: `❌ Type de DD non reconnu : \`${inputType}\`\nEssaie un nom plus précis.`, ephemeral: true });
-      }
-      if (!['M', 'F'].includes(inputSexe)) {
-        return interaction.reply({ content: '❌ Sexe invalide, entre M ou F.', ephemeral: true });
-      }
 
-      const existing = stock.dd.find(e => e.type === matchedType && e.sexe === inputSexe);
+      if (!matchedType) return interaction.reply({ content: `❌ Type non reconnu : \`${inputType}\``, ephemeral: true });
+      if (!['M', 'F'].includes(inputSexe)) return interaction.reply({ content: '❌ Sexe invalide, entre M ou F.', ephemeral: true });
 
       if (action === 'dd_naissance') {
+        const existing = stock.dd.find(e => e.type === matchedType && e.sexe === inputSexe);
         if (existing) existing.quantite += qty;
         else stock.dd.push({ type: matchedType, sexe: inputSexe, quantite: qty });
         saveStock(stock);
-        await interaction.reply({ content: `✅ +${qty} **${matchedType}** (${inputSexe}) ajouté${qty > 1 ? 's' : ''} au stock !`, ephemeral: true });
-      } else {
+        return interaction.reply({ content: `✅ +${qty} **${matchedType}** (${inputSexe}) ajouté au stock !`, ephemeral: true });
+      }
+
+      if (action === 'dd_avendre') {
+        const existing = stock.dd_vente.find(e => e.type === matchedType && e.sexe === inputSexe);
+        if (existing) existing.quantite += qty;
+        else stock.dd_vente.push({ type: matchedType, sexe: inputSexe, quantite: qty });
+        saveStock(stock);
+        return interaction.reply({ content: `✅ +${qty} **${matchedType}** (${inputSexe}) ajouté aux DD à vendre !`, ephemeral: true });
+      }
+
+      if (action === 'dd_enlever') {
+        const existing = stock.dd.find(e => e.type === matchedType && e.sexe === inputSexe);
         if (!existing || existing.quantite < qty) {
-          return interaction.reply({ content: `❌ Stock insuffisant pour **${matchedType}** (${inputSexe}) — tu en as ${existing?.quantite ?? 0}.`, ephemeral: true });
+          return interaction.reply({ content: `❌ Stock insuffisant : tu as ${existing?.quantite ?? 0} **${matchedType}** (${inputSexe}).`, ephemeral: true });
         }
         existing.quantite -= qty;
         if (existing.quantite === 0) stock.dd = stock.dd.filter(e => !(e.type === matchedType && e.sexe === inputSexe));
         saveStock(stock);
-        await interaction.reply({ content: `✅ -${qty} **${matchedType}** (${inputSexe}) vendu${qty > 1 ? 's' : ''} !`, ephemeral: true });
+        return interaction.reply({ content: `✅ -${qty} **${matchedType}** (${inputSexe}) retiré du stock.`, ephemeral: true });
       }
     }
 
-    // Parchos
-    if (action === 'parcho_gain' || action === 'parcho_vente') {
+    if (['parcho_gain', 'parcho_vente'].includes(action)) {
       const inputParcho = interaction.fields.getTextInputValue('type_parcho');
       const matchedParcho = findMatch(inputParcho, PARCHOS);
-
-      if (!matchedParcho) {
-        return interaction.reply({ content: `❌ Type de parcho non reconnu : \`${inputParcho}\`\nEssaie un nom plus précis.`, ephemeral: true });
-      }
+      if (!matchedParcho) return interaction.reply({ content: `❌ Parcho non reconnu : \`${inputParcho}\``, ephemeral: true });
 
       if (!stock.parchos[matchedParcho]) stock.parchos[matchedParcho] = 0;
 
       if (action === 'parcho_gain') {
         stock.parchos[matchedParcho] += qty;
         saveStock(stock);
-        await interaction.reply({ content: `✅ +${qty} **${matchedParcho}** ajouté${qty > 1 ? 's' : ''} !`, ephemeral: true });
+        return interaction.reply({ content: `✅ +${qty} **${matchedParcho}** ajouté !`, ephemeral: true });
       } else {
         if (stock.parchos[matchedParcho] < qty) {
-          return interaction.reply({ content: `❌ Stock insuffisant pour **${matchedParcho}** — tu en as ${stock.parchos[matchedParcho]}.`, ephemeral: true });
+          return interaction.reply({ content: `❌ Stock insuffisant : tu as ${stock.parchos[matchedParcho]} **${matchedParcho}**.`, ephemeral: true });
         }
         stock.parchos[matchedParcho] -= qty;
         saveStock(stock);
-        await interaction.reply({ content: `✅ -${qty} **${matchedParcho}** vendu${qty > 1 ? 's' : ''} !`, ephemeral: true });
+        return interaction.reply({ content: `✅ -${qty} **${matchedParcho}** vendu !`, ephemeral: true });
       }
     }
   }
