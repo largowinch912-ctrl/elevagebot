@@ -132,7 +132,7 @@ async function registerSlashCommand() {
 
 client.once(Events.ClientReady, async c => {
   console.log(`✅ Connecté en tant que ${c.user.tag}`);
-  await registerSlashCommand();
+  registerSlashCommand().catch(console.error);
 });
 
 client.on(Events.InteractionCreate, async interaction => {
