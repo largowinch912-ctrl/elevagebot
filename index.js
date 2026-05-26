@@ -109,6 +109,7 @@ function getMainButtons() {
       new ButtonBuilder().setCustomId('dd_naissance').setLabel('🥚 Naissance DD').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('dd_avendre').setLabel('🏷️ DD à vendre').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dd_enlever').setLabel('❌ Enlever DD').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('dd_vendu').setLabel('💸 DD vendue').setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('parcho_gain').setLabel('📜 Gain Parcho').setStyle(ButtonStyle.Primary),
@@ -167,6 +168,7 @@ client.on(Events.InteractionCreate, async interaction => {
       dd_enlever:   '❌ Enlever des Dragodindes',
       parcho_gain:  '📜 Gain de Parchemins',
       parcho_vente: '💰 Vente de Parchemins',
+      dd_vendu: '💸 DD vendue',
     };
     if (!titles[interaction.customId]) return;
 
@@ -242,6 +244,17 @@ client.on(Events.InteractionCreate, async interaction => {
         if (existing.quantite === 0) stock.dd = stock.dd.filter(e => !(e.type === matchedType && e.sexe === inputSexe));
         saveStock(stock);
         return interaction.reply({ content: `✅ -${qty} **${matchedType}** (${inputSexe}) retiré du stock.`, ephemeral: true });
+      }
+      
+      if (action === 'dd_vendu') {
+        const existing = stock.dd_vente.find(e => e.type === matchedType && e.sexe === inputSexe);
+        if (!existing || existing.quantite < qty) {
+          return interaction.reply({ content: `❌ Stock insuffisant dans "à vendre" : tu as ${existing?.quantite ?? 0} **${matchedType}** (${inputSexe}).`, ephemeral: true });
+        }
+        existing.quantite -= qty;
+        if (existing.quantite === 0) stock.dd_vente = stock.dd_vente.filter(e => !(e.type === matchedType && e.sexe === inputSexe));
+        saveStock(stock);
+        return interaction.reply({ content: `✅ -${qty} **${matchedType}** (${inputSexe}) vendu depuis le stock à vendre !`, ephemeral: true });
       }
     }
 
