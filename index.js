@@ -107,8 +107,10 @@ function getMainButtons() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('dd_naissance').setLabel('🥚 Naissance DD').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('dd_avendre').setLabel('🏷️ DD à vendre').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dd_enlever').setLabel('❌ Enlever DD').setStyle(ButtonStyle.Danger),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('dd_avendre').setLabel('🏷️ DD à vendre').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('dd_vendu').setLabel('💸 DD vendue').setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
@@ -245,7 +247,7 @@ client.on(Events.InteractionCreate, async interaction => {
         saveStock(stock);
         return interaction.reply({ content: `✅ -${qty} **${matchedType}** (${inputSexe}) retiré du stock.`, ephemeral: true });
       }
-      
+
       if (action === 'dd_vendu') {
         const existing = stock.dd_vente.find(e => e.type === matchedType && e.sexe === inputSexe);
         if (!existing || existing.quantite < qty) {
