@@ -184,10 +184,10 @@ client.on(Events.InteractionCreate, async interaction => {
           new TextInputBuilder().setCustomId('type_dd').setLabel('Type de DD (ex: Emeraude, Prune/Rousse...)').setStyle(TextInputStyle.Short).setRequired(true)
         ),
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('sexe_dd').setLabel('Sexe (M ou F)').setStyle(TextInputStyle.Short).setMaxLength(1).setRequired(true)
+          new TextInputBuilder().setCustomId('qte_male').setLabel('Quantité Mâles (0 si aucun)').setStyle(TextInputStyle.Short).setRequired(true)
         ),
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('quantite').setLabel('Quantité').setStyle(TextInputStyle.Short).setRequired(true)
+          new TextInputBuilder().setCustomId('qte_femelle').setLabel('Quantité Femelles (0 si aucun)').setStyle(TextInputStyle.Short).setRequired(true)
         )
       );
     } else {
@@ -215,51 +215,45 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (['dd_naissance', 'dd_avendre', 'dd_enlever', 'dd_vendu'].includes(action)) {
       const inputType = interaction.fields.getTextInputValue('type_dd');
-      const inputSexe = interaction.fields.getTextInputValue('sexe_dd').toUpperCase();
+      const qtyM = parseInt(interaction.fields.getTextInputValue('qte_male'));
+      const qtyF = parseInt(interaction.fields.getTextInputValue('qte_femelle'));
       const matchedType = findMatch(inputType, DRAGODINDES);
 
       if (!matchedType) return interaction.reply({ content: `❌ Type non reconnu : \`${inputType}\``, ephemeral: true });
-      if (!['M', 'F'].includes(inputSexe)) return interaction.reply({ content: '❌ Sexe invalide, entre M ou F.', ephemeral: true });
+      if (isNaN(qtyM) || isNaN(qtyF) || qtyM < 0 || qtyF < 0) return interaction.reply({ content: '❌ Quantités invalides !', ephemeral: true });
+      if (qtyM === 0 && qtyF === 0) return interaction.reply({ content: '❌ Entre au moins une quantité > 0.', ephemeral: true });
 
-      if (action === 'dd_naissance') {
-        const existing = stock.dd.find(e => e.type === matchedType && e.sexe === inputSexe);
-        if (existing) existing.quantite += qty;
-        else stock.dd.push({ type: matchedType, sexe: inputSexe, quantite: qty });
-        saveStock(stock);
-        return interaction.reply({ content: `✅ +${qty} **${matchedType}** (${inputSexe}) ajouté au stock !`, ephemeral: true });
-      }
+      const targetStock = ['dd_avendre', 'dd_vendu'].includes(action) ? stock.dd_vente : stock.dd;
+      const isAdd = ['dd_naissance', 'dd_avendre'].includes(action);
+      let msg = '';
 
-      if (action === 'dd_avendre') {
-        const existing = stock.dd_vente.find(e => e.type === matchedType && e.sexe === inputSexe);
-        if (existing) existing.quantite += qty;
-        else stock.dd_vente.push({ type: matchedType, sexe: inputSexe, quantite: qty });
-        saveStock(stock);
-        return interaction.reply({ content: `✅ +${qty} **${matchedType}** (${inputSexe}) ajouté aux DD à vendre !`, ephemeral: true });
-      }
+      for (const [sexe, qty] of [['M', qtyM], ['F', qtyF]]) {
+        if (qty === 0) continue;
+        const existing = targetStock.find(e => e.type === matchedType && e.sexe === sexe);
 
-      if (action === 'dd_enlever') {
-        const existing = stock.dd.find(e => e.type === matchedType && e.sexe === inputSexe);
-        if (!existing || existing.quantite < qty) {
-          return interaction.reply({ content: `❌ Stock insuffisant : tu as ${existing?.quantite ?? 0} **${matchedType}** (${inputSexe}).`, ephemeral: true });
+        if (isAdd) {
+          if (existing) existing.quantite += qty;
+          else targetStock.push({ type: matchedType, sexe, quantite: qty });
+          msg += `+${qty} **${matchedType}** (${sexe})\n`;
+        } else {
+          if (!existing || existing.quantite < qty) {
+            return interaction.reply({ content: `❌ Stock insuffisant pour **${matchedType}** (${sexe}) : tu as ${existing?.quantite ?? 0}.`, ephemeral: true });
+          }
+          existing.quantite -= qty;
+          if (existing.quantite === 0) {
+            if (['dd_avendre', 'dd_vendu'].includes(action)) {
+              stock.dd_vente = stock.dd_vente.filter(e => !(e.type === matchedType && e.sexe === sexe));
+            } else {
+              stock.dd = stock.dd.filter(e => !(e.type === matchedType && e.sexe === sexe));
+            }
+          }
+          msg += `-${qty} **${matchedType}** (${sexe})\n`;
         }
-        existing.quantite -= qty;
-        if (existing.quantite === 0) stock.dd = stock.dd.filter(e => !(e.type === matchedType && e.sexe === inputSexe));
-        saveStock(stock);
-        return interaction.reply({ content: `✅ -${qty} **${matchedType}** (${inputSexe}) retiré du stock.`, ephemeral: true });
       }
 
-      if (action === 'dd_vendu') {
-        const existing = stock.dd_vente.find(e => e.type === matchedType && e.sexe === inputSexe);
-        if (!existing || existing.quantite < qty) {
-          return interaction.reply({ content: `❌ Stock insuffisant dans "à vendre" : tu as ${existing?.quantite ?? 0} **${matchedType}** (${inputSexe}).`, ephemeral: true });
-        }
-        existing.quantite -= qty;
-        if (existing.quantite === 0) stock.dd_vente = stock.dd_vente.filter(e => !(e.type === matchedType && e.sexe === inputSexe));
-        saveStock(stock);
-        return interaction.reply({ content: `✅ -${qty} **${matchedType}** (${inputSexe}) vendu depuis le stock à vendre !`, ephemeral: true });
-      }
+      saveStock(stock);
+      return interaction.reply({ content: `✅ ${msg}`, ephemeral: true });
     }
-
     if (['parcho_gain', 'parcho_vente'].includes(action)) {
       const inputParcho = interaction.fields.getTextInputValue('type_parcho');
       const matchedParcho = findMatch(inputParcho, PARCHOS);
