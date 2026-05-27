@@ -64,8 +64,35 @@ function saveStock(stock) {
   fs.writeFileSync(STOCK_FILE, JSON.stringify(stock, null, 2));
 }
 
+const ABREVIATIONS = {
+  'am': 'Amande', 'ro': 'Rousse', 'do': 'Dorée',
+  'eb': 'Ebène', 'in': 'Indigo', 'po': 'Pourpre',
+  'or': 'Orchidée', 'iv': 'Ivoire', 'tu': 'Turquoise',
+  'pr': 'Prune', 'em': 'Emeraude',
+  'amro': 'Amande/Rousse', 'amdo': 'Amande/Dorée', 'doro': 'Dorée/Rousse',
+  'ameb': 'Amande/Ebène', 'amin': 'Amande/Indigo', 'ebro': 'Ebène/Rousse',
+  'inro': 'Indigo/Rousse', 'doeb': 'Dorée/Ebène', 'doin': 'Dorée/Indigo',
+  'ebin': 'Ebène/Indigo', 'ampo': 'Amande/Pourpre', 'amor': 'Amande/Orchidée',
+  'poro': 'Pourpre/Rousse', 'roor': 'Rousse/Orchidée', 'dopo': 'Dorée/Pourpre',
+  'door': 'Dorée/Orchidée', 'ebpo': 'Ebène/Pourpre', 'ebor': 'Ebène/Orchidée',
+  'inpo': 'Indigo/Pourpre', 'inor': 'Indigo/Orchidée', 'orpo': 'Orchidée/Pourpre',
+  'ivam': 'Ivoire/Amande', 'tuam': 'Turquoise/Amande', 'ivro': 'Ivoire/Rousse',
+  'turo': 'Turquoise/Rousse', 'doiv': 'Dorée/Ivoire', 'dotu': 'Dorée/Turquoise',
+  'ebiv': 'Ebène/Ivoire', 'ebtu': 'Ebène/Turquoise', 'iniv': 'Indigo/Ivoire',
+  'intu': 'Indigo/Turquoise', 'ivpo': 'Ivoire/Pourpre', 'tupo': 'Turquoise/Pourpre',
+  'oriv': 'Orchidée/Ivoire', 'tuor': 'Turquoise/Orchidée', 'ivtu': 'Ivoire/Turquoise',
+  'pram': 'Prune/Amande', 'emam': 'Emeraude/Amande', 'prro': 'Prune/Rousse',
+  'emro': 'Emeraude/Rousse', 'prdo': 'Prune/Dorée', 'emdo': 'Emeraude/Dorée',
+  'ebpr': 'Ebène/Prune', 'ebem': 'Ebène/Emeraude', 'prin': 'Prune/Indigo',
+  'emin': 'Emeraude/Indigo', 'prpo': 'Prune/Pourpre', 'empo': 'Emeraude/Pourpre',
+  'pror': 'Prune/Orchidée', 'emor': 'Emeraude/Orchidée', 'priv': 'Prune/Ivoire',
+  'emiv': 'Emeraude/Ivoire', 'prtu': 'Prune/Turquoise', 'emtu': 'Emeraude/Turquoise',
+  'prem': 'Prune/Emeraude',
+};
+
 function findMatch(input, list) {
   const q = input.toLowerCase().trim();
+  if (ABREVIATIONS[q]) return ABREVIATIONS[q];
   const exact = list.find(i => i.toLowerCase() === q);
   if (exact) return exact;
   const starts = list.find(i => i.toLowerCase().startsWith(q));
