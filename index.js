@@ -178,7 +178,7 @@ client.on(Events.InteractionCreate, async interaction => {
       .setCustomId(`modal_${interaction.customId}`)
       .setTitle(titles[interaction.customId]);
 
-    if (['dd_naissance', 'dd_avendre', 'dd_enlever'].includes(interaction.customId)) {
+    if (['dd_naissance', 'dd_avendre', 'dd_enlever', 'dd_vendu'].includes(interaction.customId)) {
       modal.addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId('type_dd').setLabel('Type de DD (ex: Emeraude, Prune/Rousse...)').setStyle(TextInputStyle.Short).setRequired(true)
@@ -213,7 +213,7 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.reply({ content: '❌ Quantité invalide !', ephemeral: true });
     }
 
-    if (['dd_naissance', 'dd_avendre', 'dd_enlever'].includes(action)) {
+    if (['dd_naissance', 'dd_avendre', 'dd_enlever', 'dd_vendu'].includes(action)) {
       const inputType = interaction.fields.getTextInputValue('type_dd');
       const inputSexe = interaction.fields.getTextInputValue('sexe_dd').toUpperCase();
       const matchedType = findMatch(inputType, DRAGODINDES);
