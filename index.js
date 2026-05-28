@@ -90,9 +90,25 @@ const ABREVIATIONS = {
   'prem': 'Prune/Emeraude',
 };
 
+const ABREVIATIONS_PARCHOS = {
+  'moyen vitalité': 'Parchemin Vitalité',
+  'moyen force': 'Parchemin Force',
+  'moyen intelligence': 'Parchemin Intelligence',
+  'moyen chance': 'Parchemin Chance',
+  'moyen agilité': 'Parchemin Agilité',
+  'moyen sagesse': 'Parchemin Sagesse',
+  'moy vit': 'Parchemin Vitalité',
+  'moy for': 'Parchemin Force',
+  'moy int': 'Parchemin Intelligence',
+  'moy cha': 'Parchemin Chance',
+  'moy agi': 'Parchemin Agilité',
+  'moy sag': 'Parchemin Sagesse',
+};
+
 function findMatch(input, list) {
   const q = input.toLowerCase().trim();
   if (ABREVIATIONS[q]) return ABREVIATIONS[q];
+  if (ABREVIATIONS_PARCHOS[q]) return ABREVIATIONS_PARCHOS[q];
   const exact = list.find(i => i.toLowerCase() === q);
   if (exact) return exact;
   const starts = list.find(i => i.toLowerCase().startsWith(q));
