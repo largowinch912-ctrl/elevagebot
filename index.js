@@ -250,9 +250,11 @@ client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isModalSubmit()) {
     const stock = loadStock();
     const action = interaction.customId.replace('modal_', '');
-    const qty = parseInt(interaction.fields.getTextInputValue('quantite'));
+    const qty = ['parcho_gain', 'parcho_vente'].includes(action)
+      ? parseInt(interaction.fields.getTextInputValue('quantite'))
+      : null;
 
-    if (isNaN(qty) || qty <= 0) {
+    if (['parcho_gain', 'parcho_vente'].includes(action) && (isNaN(qty) || qty <= 0)) {
       return interaction.reply({ content: '❌ Quantité invalide !', ephemeral: true });
     }
 
