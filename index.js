@@ -5,7 +5,7 @@ const {
   REST, Routes, SlashCommandBuilder
 } = require('discord.js');
 require('dotenv').config();
-const fs = require('fs');
+const mongoose = require('mongoose');
 const XLSX = require('xlsx');
 
 const client = new Client({
@@ -16,8 +16,28 @@ const client = new Client({
   ]
 });
 
-const STOCK_FILE = 'stock.json';
+// ─── MongoDB Schema ───────────────────────────────────────────────
+const stockSchema = new mongoose.Schema({
+  _id: { type: String, default: 'main' },
+  dd: [{ type: { type: String }, sexe: String, quantite: Number }],
+  dd_vente: [{ type: { type: String }, sexe: String, quantite: Number }],
+  parchos: { type: Map, of: Number, default: {} },
+});
+const Stock = mongoose.model('Stock', stockSchema);
 
+async function loadStock() {
+  let stock = await Stock.findById('main');
+  if (!stock) {
+    stock = await Stock.create({ _id: 'main', dd: [], dd_vente: [], parchos: {} });
+  }
+  return stock;
+}
+
+async function saveStock(stock) {
+  await stock.save();
+}
+
+// ─── Listes ───────────────────────────────────────────────────────
 const DRAGODINDES = [
   'Amande', 'Rousse', 'Dorée',
   'Amande/Rousse', 'Amande/Dorée', 'Dorée/Rousse',
@@ -53,17 +73,7 @@ const PARCHOS = [
   'Parchemin Doré',
 ];
 
-function loadStock() {
-  if (!fs.existsSync(STOCK_FILE)) return { dd: [], dd_vente: [], parchos: {} };
-  const s = JSON.parse(fs.readFileSync(STOCK_FILE));
-  if (!s.dd_vente) s.dd_vente = [];
-  return s;
-}
-
-function saveStock(stock) {
-  fs.writeFileSync(STOCK_FILE, JSON.stringify(stock, null, 2));
-}
-
+// ─── Abréviations ─────────────────────────────────────────────────
 const ABREVIATIONS = {
   'am': 'Amande', 'ro': 'Rousse', 'do': 'Dorée',
   'eb': 'Ebène', 'in': 'Indigo', 'po': 'Pourpre',
@@ -91,18 +101,12 @@ const ABREVIATIONS = {
 };
 
 const ABREVIATIONS_PARCHOS = {
-  'moyen vitalité': 'Parchemin Vitalité',
-  'moyen force': 'Parchemin Force',
-  'moyen intelligence': 'Parchemin Intelligence',
-  'moyen chance': 'Parchemin Chance',
-  'moyen agilité': 'Parchemin Agilité',
-  'moyen sagesse': 'Parchemin Sagesse',
-  'moy vit': 'Parchemin Vitalité',
-  'moy for': 'Parchemin Force',
-  'moy int': 'Parchemin Intelligence',
-  'moy cha': 'Parchemin Chance',
-  'moy agi': 'Parchemin Agilité',
-  'moy sag': 'Parchemin Sagesse',
+  'moyen vitalité': 'Parchemin Vitalité', 'moyen force': 'Parchemin Force',
+  'moyen intelligence': 'Parchemin Intelligence', 'moyen chance': 'Parchemin Chance',
+  'moyen agilité': 'Parchemin Agilité', 'moyen sagesse': 'Parchemin Sagesse',
+  'moy vit': 'Parchemin Vitalité', 'moy for': 'Parchemin Force',
+  'moy int': 'Parchemin Intelligence', 'moy cha': 'Parchemin Chance',
+  'moy agi': 'Parchemin Agilité', 'moy sag': 'Parchemin Sagesse',
 };
 
 function findMatch(input, list) {
@@ -118,6 +122,7 @@ function findMatch(input, list) {
   return null;
 }
 
+// ─── Excel ────────────────────────────────────────────────────────
 function generateExcel(stock) {
   const wb = XLSX.utils.book_new();
 
@@ -134,7 +139,7 @@ function generateExcel(stock) {
   XLSX.utils.book_append_sheet(wb, wsVente, 'DD à vendre');
 
   const parchoRows = [['Type', 'Quantité']];
-  for (const [type, qty] of Object.entries(stock.parchos)) {
+  for (const [type, qty] of stock.parchos.entries()) {
     if (qty > 0) parchoRows.push([type, qty]);
   }
   const wsParchos = XLSX.utils.aoa_to_sheet(parchoRows);
@@ -146,6 +151,7 @@ function generateExcel(stock) {
   return path;
 }
 
+// ─── Boutons ──────────────────────────────────────────────────────
 function getMainButtons() {
   return [
     new ActionRowBuilder().addComponents(
@@ -163,32 +169,35 @@ function getMainButtons() {
   ];
 }
 
+// ─── Slash commands ───────────────────────────────────────────────
 async function registerSlashCommand() {
   const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
   const commands = [
     new SlashCommandBuilder().setName('stock').setDescription('Envoie le fichier Excel du stock'),
     new SlashCommandBuilder().setName('elevage').setDescription('Affiche le panneau de gestion élevage'),
   ].map(c => c.toJSON());
-
   const guilds = client.guilds.cache.map(g => g.id);
   for (const guildId of guilds) {
     await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), { body: commands });
   }
 }
 
+// ─── Ready ────────────────────────────────────────────────────────
 client.once(Events.ClientReady, async c => {
   console.log(`✅ Connecté en tant que ${c.user.tag}`);
   registerSlashCommand().catch(console.error);
 });
 
+// ─── Interactions ─────────────────────────────────────────────────
 client.on(Events.InteractionCreate, async interaction => {
 
+  // /stock
   if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
-    const stock = loadStock();
+    const stock = await loadStock();
     const path = generateExcel(stock);
     const totalDD = stock.dd.reduce((s, e) => s + e.quantite, 0);
     const totalVente = stock.dd_vente.reduce((s, e) => s + e.quantite, 0);
-    const totalParchos = Object.values(stock.parchos).reduce((s, v) => s + v, 0);
+    const totalParchos = [...stock.parchos.values()].reduce((s, v) => s + v, 0);
     const resume = `📊 **Stock actuel**\n🐔 **DD en élevage :** ${totalDD}\n🏷️ **DD à vendre :** ${totalVente}\n📜 **Parchos :** ${totalParchos}`;
     await interaction.reply({
       content: resume,
@@ -198,6 +207,7 @@ client.on(Events.InteractionCreate, async interaction => {
     return;
   }
 
+  // /elevage
   if (interaction.isChatInputCommand() && interaction.commandName === 'elevage') {
     await interaction.reply({
       content: '🐔 **Gestion de l\'élevage**',
@@ -206,14 +216,15 @@ client.on(Events.InteractionCreate, async interaction => {
     return;
   }
 
+  // Boutons → Modals
   if (interaction.isButton()) {
     const titles = {
       dd_naissance: '🥚 Naissance de Dragodindes',
       dd_avendre:   '🏷️ DD à mettre en vente',
       dd_enlever:   '❌ Enlever des Dragodindes',
+      dd_vendu:     '💸 DD vendue',
       parcho_gain:  '📜 Gain de Parchemins',
       parcho_vente: '💰 Vente de Parchemins',
-      dd_vendu: '💸 DD vendue',
     };
     if (!titles[interaction.customId]) return;
 
@@ -224,7 +235,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (['dd_naissance', 'dd_avendre', 'dd_enlever', 'dd_vendu'].includes(interaction.customId)) {
       modal.addComponents(
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('type_dd').setLabel('Type de DD (ex: Emeraude, Prune/Rousse...)').setStyle(TextInputStyle.Short).setRequired(true)
+          new TextInputBuilder().setCustomId('type_dd').setLabel('Type de DD (ex: em, prro, Emeraude...)').setStyle(TextInputStyle.Short).setRequired(true)
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId('qte_male').setLabel('Quantité Mâles (0 si aucun)').setStyle(TextInputStyle.Short).setRequired(true)
@@ -236,7 +247,7 @@ client.on(Events.InteractionCreate, async interaction => {
     } else {
       modal.addComponents(
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId('type_parcho').setLabel('Type de parcho (ex: Puissant Vitalité...)').setStyle(TextInputStyle.Short).setRequired(true)
+          new TextInputBuilder().setCustomId('type_parcho').setLabel('Type de parcho (ex: puissant vit...)').setStyle(TextInputStyle.Short).setRequired(true)
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId('quantite').setLabel('Quantité').setStyle(TextInputStyle.Short).setRequired(true)
@@ -247,17 +258,12 @@ client.on(Events.InteractionCreate, async interaction => {
     return;
   }
 
+  // Modal submit
   if (interaction.isModalSubmit()) {
-    const stock = loadStock();
+    const stock = await loadStock();
     const action = interaction.customId.replace('modal_', '');
-    const qty = ['parcho_gain', 'parcho_vente'].includes(action)
-      ? parseInt(interaction.fields.getTextInputValue('quantite'))
-      : null;
 
-    if (['parcho_gain', 'parcho_vente'].includes(action) && (isNaN(qty) || qty <= 0)) {
-      return interaction.reply({ content: '❌ Quantité invalide !', ephemeral: true });
-    }
-
+    // DD
     if (['dd_naissance', 'dd_avendre', 'dd_enlever', 'dd_vendu'].includes(action)) {
       const inputType = interaction.fields.getTextInputValue('type_dd');
       const qtyM = parseInt(interaction.fields.getTextInputValue('qte_male'));
@@ -296,30 +302,45 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      saveStock(stock);
+      stock.markModified('dd');
+      stock.markModified('dd_vente');
+      await saveStock(stock);
       return interaction.reply({ content: `✅ ${msg}`, ephemeral: true });
     }
+
+    // Parchos
     if (['parcho_gain', 'parcho_vente'].includes(action)) {
       const inputParcho = interaction.fields.getTextInputValue('type_parcho');
+      const qty = parseInt(interaction.fields.getTextInputValue('quantite'));
       const matchedParcho = findMatch(inputParcho, PARCHOS);
-      if (!matchedParcho) return interaction.reply({ content: `❌ Parcho non reconnu : \`${inputParcho}\``, ephemeral: true });
 
-      if (!stock.parchos[matchedParcho]) stock.parchos[matchedParcho] = 0;
+      if (!matchedParcho) return interaction.reply({ content: `❌ Parcho non reconnu : \`${inputParcho}\``, ephemeral: true });
+      if (isNaN(qty) || qty <= 0) return interaction.reply({ content: '❌ Quantité invalide !', ephemeral: true });
+
+      const current = stock.parchos.get(matchedParcho) || 0;
 
       if (action === 'parcho_gain') {
-        stock.parchos[matchedParcho] += qty;
-        saveStock(stock);
+        stock.parchos.set(matchedParcho, current + qty);
+        stock.markModified('parchos');
+        await saveStock(stock);
         return interaction.reply({ content: `✅ +${qty} **${matchedParcho}** ajouté !`, ephemeral: true });
       } else {
-        if (stock.parchos[matchedParcho] < qty) {
-          return interaction.reply({ content: `❌ Stock insuffisant : tu as ${stock.parchos[matchedParcho]} **${matchedParcho}**.`, ephemeral: true });
+        if (current < qty) {
+          return interaction.reply({ content: `❌ Stock insuffisant : tu as ${current} **${matchedParcho}**.`, ephemeral: true });
         }
-        stock.parchos[matchedParcho] -= qty;
-        saveStock(stock);
+        stock.parchos.set(matchedParcho, current - qty);
+        stock.markModified('parchos');
+        await saveStock(stock);
         return interaction.reply({ content: `✅ -${qty} **${matchedParcho}** vendu !`, ephemeral: true });
       }
     }
   }
 });
 
-client.login(process.env.BOT_TOKEN);
+// ─── Connexion MongoDB puis Discord ──────────────────────────────
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log('✅ MongoDB connecté');
+    client.login(process.env.BOT_TOKEN);
+  })
+  .catch(err => console.error('❌ Erreur MongoDB:', err));
